@@ -93,22 +93,34 @@
                       <h4 class="card-title">Original image</h4>
                     </div>
                     <div class="blockquote blockquote-primary">
-                      <h4>Upload image file to lip-sync </h4>
-                        <!-- <button type="button" class="btn btn-outline-danger btn-icon-text" accept="image/*" style="float: right;" >Browse Image</button> -->
+                      <h4>Upload image/video file to lip-sync </h4>
                         <form id="uploadForm" class="forms-sample" enctype="multipart/form-data">
-                          <input type="file" id="fileInput" name="image" accept="image/*" style="display: none;">
-                          <label for="fileInput" class="btn btn-dark btn-rounded btn-fw">Browse Image</label>
+                          <input type="file" id="fileInput" name="media" accept="image/*,video/*" style="display: none;">
+                          <label for="fileInput" class="btn btn-dark btn-rounded btn-fw">Browse Media</label>
                           <span id="selectedFileName"></span> <!-- Element to display the selected file name -->
                           <span id="fileText"></span> <!-- Element to display the text of the selected file -->
                         </form>         
-                      <p>Supported file formats: JPG, JPEG, PNG</p>
+                      <p>Supported file formats: JPG, PNG, MP4, AVI</p>
                     </div>
                     <div class="blockquote blockquote-primary">
                       <h4>Generate Wav2Lip</h4>
                       <form method="POST" action="{{ url_for('tasks') }}">
+                        <div class="form-group">
+                          <label for="audio_device">Select Microphone:</label>
+                          <select class="form-control text-white" id="audio_device" name="audio_device" style="margin-bottom: 15px; background: #2A3038;">
+                            <option value="">-- Default System Microphone --</option>
+                            {% for dev in devices %}
+                              <option value="{{ dev.id }}">[{{ dev.id }}] {{ dev.name }}</option>
+                            {% endfor %}
+                          </select>
+                        <div class="form-group">
+                          <label for="noise_threshold">Noise Gate Threshold: <span id="threshold_val">400</span></label>
+                          <input type="range" class="form-control-range" id="noise_threshold" name="noise_threshold" min="0" max="16000" value="400" oninput="document.getElementById('threshold_val').innerText = this.value;">
+                          <small class="form-text text-muted">Increase this to ignore background static. Your mic peaked at ~10000.</small>
+                        </div>
                         <input type="submit" value="Start" name="start" class="btn btn-outline-success btn-fw">
                         <input type="submit" value="Stop" name="stop" class="btn btn-outline-danger btn-fw">
-                    </form> 
+                      </form> 
                     </div>
                   </div>
                 </div>
@@ -117,14 +129,14 @@
                 <div class="card">
                   <div class="card-body">
                     <h4 class="card-title">Wav2Lip real-time lyp-sync 🔉👄</h4>
-                    <div class="owl-carousel owl-theme full-width owl-carousel-dash portfolio-carousel" id="owl-carousel-basic">
-                      <div class="item">
-                        <img src="{{ url_for('video_feed') }}" width="50%" alt=""/>
-                      </div>
-                    </div>                    
+                    <img id="videoFeed" src="{{ url_for('video_feed') }}" width="100%" style="border-radius:8px;" alt="Live lip-sync feed"/>
+                    <script>
+                      // Prevent browser from caching the MJPEG stream
+                      document.getElementById('videoFeed').src = "{{ url_for('video_feed') }}?t=" + new Date().getTime();
+                    </script>
                   </div>
                 </div>
-              </div>              
+              </div>
             </div>
           </div>
 
