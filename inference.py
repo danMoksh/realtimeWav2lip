@@ -38,8 +38,8 @@ parser.add_argument('--outfile', type=str, help='Video path to save result. See 
 
 parser.add_argument('--static', type=bool, 
                     help='If True, then use only first video frame for inference', default=False)
-parser.add_argument('--fps', type=float, help='Can be specified only if input is a static image (default: 25)', 
-                    default=15., required=False)
+parser.add_argument('--fps', type=float, help='Can be specified only if input is a static image (default: 50)', 
+                    default=50, required=False)
 
 parser.add_argument('--pads', nargs='+', type=int, default=[0, 10, 0, 0], 
                     help='Padding (top, bottom, left, right). Please adjust to include chin at least')
@@ -77,7 +77,7 @@ class Wav2LipInference:
         self.CHANNELS = 1 # no of audio channels, 1 means monaural audio
         self.MIC_RATE = 48000 # Sample rate for the microphone to prevent PortAudio errors
         self.RATE = 16000 # sample rate of the audio stream, 16000 samples/second (required by Wav2Lip)
-        self.RECORD_SECONDS = 0.5 # time for which we capture the audio
+        self.RECORD_SECONDS = 0.2 # time for which we capture the audio (reduced from 0.5s for ultra-low latency)
         self.mel_step_size = 16 # mel freq step size
         self.audio_fs = 16000    # Sample rate
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -90,6 +90,44 @@ class Wav2LipInference:
 
         self.face_detect_cache_result = None
         self.img_tk = None
+
+        print("Loading GFPGAN model for sharp face enhancement...")
+        try:
+            from gfpgan import GFPGANer
+            import os
+            
+            # Create restorer only if the checkpoint exists
+            ckpt_path = 'checkpoints/GFPGANv1.4.pth'
+            if os.path.exists(ckpt_path):
+                self.restorer = GFPGANer(
+                    model_path=ckpt_path,
+                    upscale=1,
+                    arch='clean',
+                    channel_multiplier=2,
+                    bg_upsampler=None)
+                print("GFPGAN loaded successfully.")
+            else:
+                print(f"GFPGAN checkpoint not found at {ckpt_path}. Skipping enhancement.")
+                self.restorer = None
+        except Exception as e:
+            print(f"Failed to load GFPGAN: {e}. Skipping enhancement.")
+            self.restorer = None
+
+        print("Checking for v4l2loopback virtual camera (/dev/video2) for OBS...")
+        try:
+            import pyfakewebcam
+            import os
+            if os.path.exists('/dev/video2'):
+                # Assuming 1280x720 or a generic high-res output, pyfakewebcam needs strict dimensions.
+                # Actually, Wav2Lip outputs at whatever args.out_height is, which defaults to 480.
+                # But the video could have any aspect ratio. We must initialize this dynamically later when we know the dimensions.
+                self.fake_cam = None 
+            else:
+                self.fake_cam = None
+                print("Virtual camera /dev/video2 not found. Run 'sudo modprobe v4l2loopback devices=1 video_nr=2 card_label=\"Wav2Lip\" exclusive_caps=1' to use OBS.")
+        except ImportError:
+            self.fake_cam = None
+            print("pyfakewebcam not installed.")
 
 
     def load_wav2lip_openvino_model(self):
@@ -357,9 +395,25 @@ def update_frames(full_frames, audio_queue, inference_pipline, video_writer=None
             p = cv2.resize(p.astype(np.uint8), (x2 - x1, y2 - y1))
             f[y1:y2, x1:x2] = p
 
+            # Apply GFPGAN post-processing to sharpen the blurry Wav2Lip mouth
+            if hasattr(inference_pipline, 'restorer') and inference_pipline.restorer is not None:
+                try:
+                    _, _, f = inference_pipline.restorer.enhance(f, has_aligned=False, only_center_face=False, paste_back=True)
+                except Exception as e:
+                    print("GFPGAN error:", e)
+
             # Save frame to video file
             if video_writer is not None:
                 video_writer.write(f)
+                
+            # Stream directly to OBS via v4l2loopback Virtual Camera
+            if hasattr(inference_pipline, 'fake_cam') and inference_pipline.fake_cam is not None:
+                try:
+                    # pyfakewebcam requires RGB array
+                    rgb_f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
+                    inference_pipline.fake_cam.schedule_frame(rgb_f)
+                except Exception as e:
+                    print("FakeWebcam error:", e)
 
             # Stream frame to browser as MJPEG
             _, buffer = cv2.imencode('.jpg', f)
@@ -428,6 +482,16 @@ def main(imagefilepath, get_flag, results_dir='./results/', device_id=None, p=No
     video_writer = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
     print(f"Saving output video to: {out_path}")
 
+    # Initialize fake camera if it was marked as possible
+    import os
+    if os.path.exists('/dev/video2'):
+        try:
+            import pyfakewebcam
+            inference_pipline.fake_cam = pyfakewebcam.FakeWebcam('/dev/video2', w, h)
+            print(f"OBS Virtual Camera initialized at /dev/video2 ({w}x{h})")
+        except Exception as e:
+            print(f"Failed to initialize virtual camera: {e}")
+            
     def _wrap_up_video():
         if video_writer.isOpened():
             video_writer.release()
