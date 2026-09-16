@@ -75,7 +75,8 @@ class Wav2LipInference:
         
         self.CHUNK = 1024 # piece of audio data
         self.CHANNELS = 1 # no of audio channels, 1 means monaural audio
-        self.RATE = 16000 # sample rate of the audio stream, 16000 samples/second
+        self.MIC_RATE = 48000 # Sample rate for the microphone to prevent PortAudio errors
+        self.RATE = 16000 # sample rate of the audio stream, 16000 samples/second (required by Wav2Lip)
         self.RECORD_SECONDS = 0.5 # time for which we capture the audio
         self.mel_step_size = 16 # mel freq step size
         self.audio_fs = 16000    # Sample rate
@@ -157,8 +158,9 @@ class Wav2LipInference:
                 yield prev_ret
 
     def record_audio_stream(self, audio_queue):
+        import librosa
         frames = []
-        target_samples = int(self.RATE * self.RECORD_SECONDS)
+        target_samples = int(self.MIC_RATE * self.RECORD_SECONDS)
         samples_collected = 0
         
         while samples_collected < target_samples:
@@ -171,11 +173,15 @@ class Wav2LipInference:
                 break
                 
         if not frames:
-            return np.zeros(target_samples, dtype=np.float32)
+            return np.zeros(int(self.RATE * self.RECORD_SECONDS), dtype=np.float32)
             
         audio_data = np.concatenate(frames)
         # Flatten and truncate to exact length needed
         audio_data = audio_data.flatten()[:target_samples]
+        
+        # Downsample from 48000Hz to 16000Hz for Wav2Lip
+        audio_data = librosa.resample(audio_data, orig_sr=self.MIC_RATE, target_sr=self.RATE)
+        
         return audio_data
 
     def get_mel_chunks(self, audio_data, noise_threshold=400):
@@ -479,7 +485,7 @@ def main(imagefilepath, get_flag, results_dir='./results/', device_id=None, p=No
                         audio_queue.put(indata.copy())
 
                     kwargs = {
-                        'samplerate': inference_pipline.RATE,
+                        'samplerate': inference_pipline.MIC_RATE,
                         'blocksize': inference_pipline.CHUNK,
                         'dtype': 'float32',
                         'channels': inference_pipline.CHANNELS,
