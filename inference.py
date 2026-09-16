@@ -483,7 +483,6 @@ def main(imagefilepath, get_flag, results_dir='./results/', device_id=None, p=No
     print(f"Saving output video to: {out_path}")
 
     # Initialize fake camera if it was marked as possible
-    import os
     if os.path.exists('/dev/video2'):
         try:
             import pyfakewebcam
