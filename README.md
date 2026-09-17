@@ -1,56 +1,57 @@
-# Wav2Lip Studio (Real-Time HD) 🎙️👄
+# realtime wav2lip studio
+> **python 3.10+ | tested on linux fedora (gnome)**
 
-A completely overhauled, modern, and production-ready real-time lip-syncing application based on Wav2Lip. 
+![realtime wav2lip studio full ui](put-your-screenshot-link-here.png)
 
-This repository heavily upgrades the original real-time Wav2Lip architecture to deliver **zero-latency audio**, **HD face restoration**, **universal microphone support**, and a **modern web UI**.
+this fork adds a fully asynchronous audio pipeline and built-in gfpgan face restoration, meaning you no longer need virtual audio cables to prevent crashes or separate offline tools to fix blurry mouth outputs.
+
+feel free to fork this if you need further post-processing effects.
+
+**note:** this built-in pipeline is designed for real-time streaming and local inference. for offline video dubbing, professional batch processors will still offer higher control.
+
+### my custom contributions
+*   **async audio (sounddevice):** replaced blocking pyaudio loops with an asynchronous queue to completely decouple mic capture from ai inference.
+*   **universal mic support (librosa):** added a real-time 48khz to 16khz resampler. prevents portaudio `-9997` crashes on bluetooth headsets and virtual cables.
+*   **gfpgan integration:** added an optional face restoration pass that intercepts the 96x96 wav2lip output and upscales the mouth/teeth.
+*   **video uploads:** updated the flask backend and ui to support `.mp4` uploads, looping the frames continuously instead of freezing.
+*   **noise gate ui:** wired an audio threshold slider into the frontend to prevent the model from lip-syncing to background static.
+*   **50 fps generation:** updated default generation for static images from 25 to 50 fps.
 
 ---
 
-## 🌟 What's New in This Version?
+## 🚀 quick start & installation
+the installation process remains largely the same as the original architecture, with a few extra dependencies.
 
-1. **Async Audio Pipeline (`sounddevice`)**: Replaced the legacy blocking PyAudio logic with a fully asynchronous background queue. This completely decouples microphone capture from the AI inference thread, resulting in zero audio dropouts.
-2. **Universal Microphone Support**: Fixed the notorious PortAudio `-9997` error (which crashed on Bluetooth headsets and virtual cables). Added a real-time `librosa` resampler to capture audio at a universally supported 48kHz and instantly downsample it to 16kHz for Wav2Lip.
-3. **HD Face Restoration (GFPGAN)**: Added an optional **GFPGAN v1.4** post-processing pass. It intercepts the famously blurry 96x96 Wav2Lip output and surgically enhances the mouth and teeth back to High Definition in real time.
-4. **Video Upload Support**: The Flask app now natively supports uploading MP4/video files! Instead of freezing on the last frame, it seamlessly loops the video seamlessly in the background.
-5. **Noise Gate Controls**: Added an adjustable threshold slider to the Web UI to prevent the model from lip-syncing to background static/fan noise.
-6. **50 FPS Output**: Upgraded the default generation speed for static images to 50 FPS for buttery smooth outputs.
-7. **Modern Web UI**: Completely redesigned the frontend with a dark cinematic layout and better responsiveness.
+1. clone this repository to your machine.
+2. ensure you have python 3.10+ installed.
+3. create and activate a virtual environment.
+4. install the required dependencies (`pip install -r requirements.txt`).
+5. **(optional)** download `GFPGANv1.4.pth` and place it in the `checkpoints/` directory for face restoration.
+6. start the server by running `python app.py`.
+7. open `http://localhost:8080` in your browser.
 
-## 🛠️ Installation
+---
 
-**1. Clone the repo:**
-```bash
-git clone https://github.com/danMoksh/realtimeWav2lip.git
-cd realtimeWav2lip
-```
+## the tuning guide (pipeline parameters)
+these settings affect how the model interprets your audio and video input.
 
-**2. Set up your Virtual Environment:**
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+*   **noise threshold:** sets the volume gate.
+    *   *raise it (e.g., 500+):* if you have loud fans or keyboard clicks causing the mouth to twitch when you aren't speaking.
+    *   *lower it (e.g., 100):* if the ends of your words are being cut off prematurely.
+*   **fps (static images):** sets the mel-spectrogram step size for image generation. `50 fps` provides smoother output but requires more gpu overhead than `25 fps`.
+*   **gfpgan restoration:** sharpens the mouth. disable this if you are dropping frames, as it adds roughly 20ms of overhead per frame.
 
-**3. Download the GFPGAN Checkpoint (Optional but highly recommended for HD):**
-Download `GFPGANv1.4.pth` and place it in the `checkpoints/` folder.
-```bash
-wget https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth -O checkpoints/GFPGANv1.4.pth
-```
+---
 
-*(Note: The `wav2lip_gan.pth` model must also be placed in the `Wav2Lip/checkpoints/` folder as usual).*
+## the "clean stream" preset
+if you are streaming to obs and want a sharp, non-twitchy output, use this setup:
 
-## 🚀 Running the App
+*   **input media:** static image (requires less overhead than looping an mp4)
+*   **fps:** 50
+*   **noise threshold:** 400
+*   **gfpgan:** enabled
+*   **sync offset (in obs):** set mic delay to ~100ms to match the inference buffer.
 
-```bash
-python app.py
-```
-1. Open your browser to `http://localhost:8080`.
-2. Upload a face (Image or MP4 Video).
-3. Set your noise threshold.
-4. Click **Start** and begin speaking into your microphone!
+---
 
-## 🙏 Credits
-
-Massive shoutout to [devkrish23](https://github.com/devkrish23/realtimeWav2lip) for the original Flask and OpenVINO implementation that served as the foundation for this repository. 
-
-The original Wav2Lip model was created by the researchers at [Rudrabha/Wav2Lip](https://github.com/Rudrabha/Wav2Lip). GFPGAN was created by [TencentARC/GFPGAN](https://github.com/TencentARC/GFPGAN).
+**credits:** thanks to [devkrish23](https://github.com/devkrish23/realtimeWav2lip) for the original flask architecture. wav2lip model by [rudrabha](https://github.com/Rudrabha/Wav2Lip) and gfpgan by [tencentarc](https://github.com/TencentARC/GFPGAN).
