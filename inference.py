@@ -113,22 +113,6 @@ class Wav2LipInference:
             print(f"Failed to load GFPGAN: {e}. Skipping enhancement.")
             self.restorer = None
 
-        print("Checking for v4l2loopback virtual camera (/dev/video2) for OBS...")
-        try:
-            import pyfakewebcam
-            import os
-            if os.path.exists('/dev/video2'):
-                # Assuming 1280x720 or a generic high-res output, pyfakewebcam needs strict dimensions.
-                # Actually, Wav2Lip outputs at whatever args.out_height is, which defaults to 480.
-                # But the video could have any aspect ratio. We must initialize this dynamically later when we know the dimensions.
-                self.fake_cam = None 
-            else:
-                self.fake_cam = None
-                print("Virtual camera /dev/video2 not found. Run 'sudo modprobe v4l2loopback devices=1 video_nr=2 card_label=\"Wav2Lip\" exclusive_caps=1' to use OBS.")
-        except ImportError:
-            self.fake_cam = None
-            print("pyfakewebcam not installed.")
-
 
     def load_wav2lip_openvino_model(self):
         '''
@@ -405,15 +389,6 @@ def update_frames(full_frames, audio_queue, inference_pipline, video_writer=None
             # Save frame to video file
             if video_writer is not None:
                 video_writer.write(f)
-                
-            # Stream directly to OBS via v4l2loopback Virtual Camera
-            if hasattr(inference_pipline, 'fake_cam') and inference_pipline.fake_cam is not None:
-                try:
-                    # pyfakewebcam requires RGB array
-                    rgb_f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-                    inference_pipline.fake_cam.schedule_frame(rgb_f)
-                except Exception as e:
-                    print("FakeWebcam error:", e)
 
             # Stream frame to browser as MJPEG
             _, buffer = cv2.imencode('.jpg', f)
@@ -482,15 +457,7 @@ def main(imagefilepath, get_flag, results_dir='./results/', device_id=None, p=No
     video_writer = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
     print(f"Saving output video to: {out_path}")
 
-    # Initialize fake camera if it was marked as possible
-    if os.path.exists('/dev/video2'):
-        try:
-            import pyfakewebcam
-            inference_pipline.fake_cam = pyfakewebcam.FakeWebcam('/dev/video2', w, h)
-            print(f"OBS Virtual Camera initialized at /dev/video2 ({w}x{h})")
-        except Exception as e:
-            print(f"Failed to initialize virtual camera: {e}")
-            
+
     def _wrap_up_video():
         if video_writer.isOpened():
             video_writer.release()
