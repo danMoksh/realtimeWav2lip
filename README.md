@@ -1,7 +1,6 @@
-# realtime wav2lip studio
+# realtime wav2lip
 > **python 3.10+ | tested on linux fedora (gnome)**
 
-![realtime wav2lip studio full ui](put-your-screenshot-link-here.png)
 
 this fork adds a fully asynchronous audio pipeline and built-in gfpgan face restoration, meaning you no longer need virtual audio cables to prevent crashes or separate offline tools to fix blurry mouth outputs.
 
